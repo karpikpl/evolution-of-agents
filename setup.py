@@ -7,16 +7,25 @@ from semantic_kernel.agents import (
     AzureAIAgentSettings,
 )
 from semantic_kernel.functions.kernel_plugin import KernelPlugin
-from azure.ai.agents.models import (
-    ToolDefinition,
-)
+from azure.ai.agents.models import ToolDefinition, Tool, ToolResources
 from semantic_kernel.agents import (
     AzureAIAgentThread,
 )
 from azure.ai.projects.aio import AIProjectClient
 from semantic_kernel.contents import FunctionCallContent, FunctionResultContent
 from semantic_kernel.contents.chat_message_content import ChatMessageContent
-
+from semantic_kernel.contents.file_reference_content import FileReferenceContent
+from semantic_kernel.contents import (
+    ChatMessageContent,
+    FunctionCallContent,
+    FunctionResultContent,
+    StreamingAnnotationContent,
+    StreamingChatMessageContent,
+    StreamingFileReferenceContent,
+    StreamingTextContent,
+    TextContent,
+    ImageContent,
+)
 # Load environment variables from the .env file
 load_dotenv(override=True)
 endpoint = os.environ.get("AZURE_AI_FOUNDRY_CONNECTION_STRING")
@@ -74,9 +83,24 @@ async def create_agent(
     agent_name: str,
     agent_instructions: str,
     client: AIProjectClient,
-    tools: list[ToolDefinition] = [],
+    tools: list[Tool | ToolDefinition] = [],
     plugins: list[KernelPlugin] = [],
 ) -> AzureAIAgent:
+    tool_definitions: list[ToolDefinition] = []
+    tool_resources = ToolResources()
+
+    for tool in tools:
+        # Accept either a Tool wrapper (e.g., CodeInterpreterTool, OpenApiTool) or a ToolDefinition
+        if hasattr(tool, "definitions"):
+            tool_definitions = tool_definitions + tool.definitions  # type: ignore[attr-defined]
+        else:
+            # Assume this is already a ToolDefinition
+            tool_definitions.append(tool)  # type: ignore[arg-type]
+
+        # If this tool carries resources (e.g., CodeInterpreterTool), pick them up
+        res = getattr(tool, "resources", None)
+        if getattr(res, "code_interpreter", None) is not None:
+            tool_resources.code_interpreter = res.code_interpreter
 
     agent_definition = None
     async for agent in client.agents.list_agents():
@@ -92,7 +116,8 @@ async def create_agent(
             agent_id=agent_definition.id,
             instructions=agent_instructions,
             model=ai_agent_settings.model_deployment_name,
-            tools=tools,
+            tools=tool_definitions,
+            tool_resources=tool_resources,
             temperature=0.2,
         )
         print(
@@ -103,7 +128,8 @@ async def create_agent(
             model=ai_agent_settings.model_deployment_name,
             name=agent_name,
             instructions=agent_instructions,
-            tools=tools,
+            tools=tool_definitions,
+            tool_resources=tool_resources,
             temperature=0.2,
         )
         print(
@@ -134,7 +160,7 @@ async def test_agent(
     agent: AzureAIAgent,
     user_message: str,
     thread: AzureAIAgentThread = None,
-):
+) -> AzureAIAgentThread:
     try:
         thread = thread or AzureAIAgentThread(client=client)
         async for agent_response in agent.invoke(
@@ -143,8 +169,25 @@ async def test_agent(
             additional_instructions="Today is " + date.today().strftime("%Y-%m-%d"),
             on_intermediate_message=on_intermediate_message,
         ):
-            print(f"Agent: {agent_response}")
+            for item in agent_response.items or []:
+                if isinstance(item, TextContent):
+                    if item.metadata.get('code', None):
+                        print("------- CODE START ----------")
+                        print(item.text)
+                        print("------- CODE END ------------")
+                    else:
+                        print(f"Agent: {item.text}")
+                elif isinstance(item, FileReferenceContent):
+                    await client.agents.files.save(
+                        file_id=item.file_id,
+                        file_name=f"downloaded__{item.file_id}.png",
+                    )
+                    print(
+                        f"Downloaded file: {item.file_id} saved as downloaded__{item.file_id}.png"
+                    )
+                    from IPython.display import Image, display 
+                    display(Image(f"downloaded__{item.file_id}.png"))
             thread = agent_response.thread
-            return thread
+        return thread
     except Exception as e:
         print(f"Agent: {e}")
