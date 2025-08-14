@@ -7,7 +7,7 @@
   },
   "servers": [
     {
-      "url": "<TBD>"
+      "url": "https://wttr.in"
     }
   ],
   "auth": [],
