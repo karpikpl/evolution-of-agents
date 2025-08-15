@@ -96,9 +96,19 @@ Explore each stage with hands-on Jupyter notebooks:
 ## 📝 How to Use
 
 1. Clone the repo
-2. Install dependencies (`uv sync` or `pip install -r requirements.txt`)
-3. Open notebooks in VS Code or Jupyter Lab
+2. Install dependencies (`uv sync`)
+3. Create `.env` file based on `.env.example`
+4. Open notebooks in VS Code or Jupyter Lab
+5. Select kernel from `.venv/bin/python`
 4. Follow each notebook to see the evolution in action
+
+### Setup for demo 7
+
+Workbook for multi-agents requires additional steps:
+- Foundry has connection to bing grounding
+- Foundry has connection to [browser automation](https://learn.microsoft.com/en-us/azure/ai-foundry/agents/how-to/tools/browser-automation#setup)
+- Logic App Standard with 4 workflows:
+  - create_event, get_events, email_me, get_current_time
 
 ---
 
